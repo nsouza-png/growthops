@@ -1,0 +1,26 @@
+{
+  "scripts": {
+    "rag:ingest": "node scripts/rag-ingest.js",
+    "rag:dry-run": "node scripts/rag-ingest.js --dry-run",
+    "validate:pdi-dataset": "node scripts/validate-pdi-dataset.js",
+    "test:rag-guardrails": "node --test scripts/rag-guardrails.test.js",
+    "test:enrich-lock-unit": "node --test scripts/enrich-lock-decision.unit.test.mjs",
+    "test:enrich-lock": "node --test scripts/enrich-lock-idempotency.test.js",
+    "pipeline:health": "node scripts/pipeline-health-stuck.js",
+    "audit:roles": "node scripts/audit-roles.js",
+    "rag:runtime-check": "node scripts/validate-rag-pipeline-runtime.js",
+    "snapshot:schema": "node scripts/snapshot-gp-schema.js --file-only",
+    "snapshot:schema:linked": "node scripts/snapshot-gp-schema.js",
+    "preflight:go-live": "node scripts/preflight-go-live.js",
+    "preflight:release": "node scripts/preflight-release.js",
+    "e2e:authenticated": "npm --prefix app exec -- playwright test --project=chromium tests/e2e/authenticated"
+  },
+  "devDependencies": {
+    "supabase": "^2.95.3"
+  },
+  "dependencies": {
+    "@langchain/openai": "^0.6.11",
+    "@langchain/textsplitters": "^0.1.0",
+    "@supabase/supabase-js": "^2.57.4"
+  }
+}

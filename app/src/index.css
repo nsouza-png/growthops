@@ -1,0 +1,122 @@
+/* Manrope — fonte digital oficial G4 Educação */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  /* ── Dark mode CSS variables ── */
+  :root {
+    --bg-base:     #F5F4F3;
+    --bg-card:     #FFFFFF;
+    --bg-card2:    #EAE9E7;
+    --bg-elevated: #EFEEEC;
+    --border:      rgba(0,31,53,0.10);
+    --border-mid:  rgba(0,31,53,0.16);
+    --text-primary:   #001F35;
+    --text-secondary: rgba(0,31,53,0.62);
+    --text-tertiary:  rgba(0,31,53,0.36);
+  }
+
+  .dark {
+    --bg-base:     #001F35;
+    --bg-card:     #031B26;
+    --bg-card2:    #0A2A3D;
+    --bg-elevated: #184460;
+    --border:      rgba(185,145,91,0.14);
+    --border-mid:  rgba(185,145,91,0.22);
+    --text-primary:   #F5F4F3;
+    --text-secondary: rgba(245,244,243,0.65);
+    --text-tertiary:  rgba(245,244,243,0.38);
+  }
+
+  body {
+    @apply bg-bg-base text-text-primary font-sans antialiased;
+    font-size: 14px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border-mid rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-border-light;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-card border border-border rounded-2xl p-5;
+  }
+
+  .card-sm {
+    @apply bg-bg-card border border-border rounded-xl p-4;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest;
+  }
+
+  .badge-navy {
+    @apply badge bg-g4-navy text-g4-silver;
+  }
+
+  .badge-golden {
+    @apply badge bg-g4-golden text-g4-navy;
+  }
+
+  .badge-red {
+    @apply badge bg-g4-red text-white;
+  }
+
+  .badge-green {
+    @apply badge bg-signal-green/20 text-signal-green;
+  }
+
+  .badge-blue {
+    @apply badge bg-signal-blue/20 text-signal-blue;
+  }
+
+  .badge-amber {
+    @apply badge bg-signal-amber/20 text-signal-amber;
+  }
+
+  .badge-sim {
+    @apply badge bg-signal-amber/10 text-signal-amber border border-signal-amber/30;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150 cursor-pointer;
+  }
+
+  .btn-primary {
+    @apply btn bg-g4-golden text-g4-navy hover:opacity-90 active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-text-secondary hover:bg-bg-elevated hover:text-text-primary active:scale-95;
+  }
+
+  .btn-outline {
+    @apply btn bg-transparent border border-border text-text-secondary hover:border-border-mid hover:text-text-primary active:scale-95;
+  }
+
+  .score-ring {
+    @apply inline-flex items-center justify-center rounded-full font-bold tabular-nums;
+  }
+
+  .section-eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[0.12em] text-text-tertiary mb-1;
+  }
+}
