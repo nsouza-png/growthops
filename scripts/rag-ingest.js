@@ -43,12 +43,87 @@ const splitter = new RecursiveCharacterTextSplitter({
 
 const ALLOWED_EXT = new Set(['.md', '.txt', '.json', '.csv'])
 
+const SKIP_DIRS = new Set(['_erros', '_errors', 'node_modules', '.git'])
+
+// Mapa canônico seller_name -> seller_email (corrige emails de organizador errados)
+const SELLER_EMAIL_MAP = {
+  'Aline Hipólito': 'a.hipolito@g4educacao.com',
+  'Júnior Cruz': 'j.cruz@g4educacao.com',
+  'João Resende': 'j.resende@g4educacao.com',
+  'Laura Zacharczuk': 'l.zacharczuk@g4educacao.com',
+  'Mathias Alves': 'm.t.alves@g4educacao.com',
+  'Augusto Rebouças': 'a.reboucas@g4educacao.com',
+  'Joanna Farias': 'j.farias@g4educacao.com',
+  'Yuri Rimkus': 'y.rimkus@g4educacao.com',
+  'Felice Napolitano': 'f.napolitano@g4educacao.com',
+  'Carolina Lopes': 'carolina.lopes@g4educacao.com',
+  'Lucas Tavares': 'lucas.tavares@g4educacao.com',
+  'Rafael Pradal': 'r.pradal@g4educacao.com',
+  'Patrick Ribeiro': 'patrick.ribeiro@g4educacao.com',
+  'João Rodrigues': 'joao.rodrigues@g4educacao.com',
+  'James Quatrini': 'j.quatrini@g4educacao.com',
+  'Felipe de Paula': 'f.depaula@g4educacao.com',
+}
+
+/**
+ * Extrai metadata enriquecida de um arquivo de análise JSON.
+ * Retorna null se o arquivo não for uma análise de call G4.
+ */
+function extractAnalysisMetadata(filePath, raw) {
+  try {
+    const ext = path.extname(filePath).toLowerCase()
+    if (ext !== '.json') return { ext, origin: 'knowledge_base' }
+
+    const parsed = JSON.parse(raw)
+
+    // Detecta se é arquivo de análise de call G4
+    if (!parsed.call_metadata && !parsed._call_raw) {
+      return { ext, origin: 'knowledge_base' }
+    }
+
+    const meta = parsed.call_metadata || {}
+    const raw_call = parsed._call_raw || {}
+
+    const seller_name = meta.seller_name || raw_call.nome_organizador || null
+    const seller_email = seller_name
+      ? (SELLER_EMAIL_MAP[seller_name] || raw_call.email || raw_call.email_organizador || null)
+      : (raw_call.email || raw_call.email_organizador || null)
+
+    const call_id = meta.call_id || raw_call.id || null
+    const tldv_call_id = meta.tldv_call_id || raw_call.tldv_call_id || null
+    const call_date = meta.call_date || raw_call.date || null
+    const data_source = meta.data_source || raw_call.data_source || null
+    const squad = meta.squad || meta.team || raw_call.squad || null
+    const duration_min = meta.duration_min || raw_call.duracao_min || null
+
+    const mapped = !!(seller_email || call_id)
+
+    return {
+      ext,
+      origin: 'analises_prontas',
+      seller_name,
+      seller_email,
+      call_id,
+      tldv_call_id,
+      call_date,
+      data_source,
+      squad,
+      duration_min,
+      mapped,
+      unmapped: !mapped,
+      ingested_at: new Date().toISOString(),
+    }
+  } catch {
+    return { ext: path.extname(filePath).toLowerCase(), origin: 'knowledge_base', parse_error: true }
+  }
+}
+
 function walkFiles(dir, out = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
   for (const entry of entries) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      walkFiles(full, out)
+      if (!SKIP_DIRS.has(entry.name)) walkFiles(full, out)
     } else if (ALLOWED_EXT.has(path.extname(entry.name).toLowerCase())) {
       out.push(full)
     }
@@ -78,16 +153,28 @@ async function ingestFile(filePath) {
   const relPath = path.relative(SOURCE_DIR, filePath).replace(/\\/g, '/')
   const raw = fs.readFileSync(filePath, 'utf8')
   const checksum = sha256(raw)
+  const fileMeta = extractAnalysisMetadata(filePath, raw)
 
   const docs = await splitter.createDocuments([raw], [{ source: relPath }])
   const chunks = docs.map((d) => d.pageContent.trim()).filter(Boolean)
   if (chunks.length === 0) return { file: relPath, chunks: 0, checksum }
 
   if (DRY_RUN) {
-    return { file: relPath, chunks: chunks.length, checksum }
+    return { file: relPath, chunks: chunks.length, checksum, meta: fileMeta }
   }
 
-  const uploadPath = `ingested/${relPath}`
+  // Deduplication: skip if checksum already exists
+  const { data: existing } = await supabase
+    .from('knowledge_files')
+    .select('id')
+    .eq('checksum', checksum)
+    .maybeSingle()
+  if (existing) {
+    return { file: relPath, chunks: 0, skipped: true }
+  }
+
+  const safeRelPath = relPath.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._\-/]/g, '_')
+  const uploadPath = `ingested/${safeRelPath}`
   const { error: uploadError } = await supabase.storage
     .from(RAG_BUCKET)
     .upload(uploadPath, Buffer.from(raw, 'utf8'), {
@@ -103,7 +190,7 @@ async function ingestFile(filePath) {
       bucket: RAG_BUCKET,
       storage_path: uploadPath,
       checksum,
-      metadata: { ext: path.extname(filePath).toLowerCase() },
+      metadata: fileMeta,
     })
     .select('id')
     .single()
@@ -111,20 +198,29 @@ async function ingestFile(filePath) {
 
   const vectors = await embeddings.embedDocuments(chunks)
 
+  const chunkMeta = fileMeta.origin === 'analises_prontas'
+    ? {
+        origin: fileMeta.origin,
+        seller_email: fileMeta.seller_email || null,
+        squad: fileMeta.squad || null,
+        call_id: fileMeta.call_id || null,
+      }
+    : {}
+
   const payload = chunks.map((content, idx) => ({
     file_id: fileRow.id,
     source: relPath,
     chunk_index: idx,
     content,
     token_count: Math.ceil(content.length / 4),
-    metadata: {},
+    metadata: chunkMeta,
     embedding: toPgVector(vectors[idx]),
   }))
 
   const { error: chunkError } = await supabase.from('knowledge_chunks').insert(payload)
   if (chunkError) throw chunkError
 
-  return { file: relPath, chunks: chunks.length }
+  return { file: relPath, chunks: chunks.length, meta: fileMeta }
 }
 
 async function main() {
@@ -138,13 +234,24 @@ async function main() {
   console.log(`Chunking config: size=${CHUNK_SIZE}, overlap=${CHUNK_OVERLAP}`)
 
   let totalChunks = 0
+  let totalMapped = 0
+  let totalUnmapped = 0
+  let totalSkipped = 0
+
   for (const file of files) {
     const result = await ingestFile(file)
     totalChunks += result.chunks
-    console.log(`${DRY_RUN ? 'Validated' : 'Ingested'} ${result.file} (${result.chunks} chunks)`)
+    if (result.skipped) {
+      totalSkipped++
+      console.log(`Skipped (already ingested): ${result.file}`)
+    } else {
+      if (result.meta?.mapped) totalMapped++
+      if (result.meta?.unmapped) totalUnmapped++
+      console.log(`${DRY_RUN ? 'Validated' : 'Ingested'} ${result.file} (${result.chunks} chunks)${result.meta?.seller_email ? ' seller=' + result.meta.seller_email : ''}`)
+    }
   }
 
-  console.log(`${DRY_RUN ? 'Dry-run done' : 'Done'}. Files: ${files.length}, chunks: ${totalChunks}`)
+  console.log(`${DRY_RUN ? 'Dry-run done' : 'Done'}. Files: ${files.length}, chunks: ${totalChunks}, mapped: ${totalMapped}, unmapped: ${totalUnmapped}, skipped: ${totalSkipped}`)
 }
 
 main().catch((err) => {
