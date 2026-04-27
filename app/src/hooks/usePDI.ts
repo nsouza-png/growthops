@@ -50,38 +50,36 @@ export function usePDI(closerEmailParam?: string) {
         // Fetch last 8 weeks of scores for this closer vs squad avg
         const eightWeeksAgo = new Date()
         eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56)
+        const sinceIso = eightWeeksAgo.toISOString()
+
+        // Canonical schema: calls has seller_email; framework_scores links via call_id.
+        const { data: callsRaw } = await supabase
+          .from('calls')
+          .select('id, seller_email, created_at')
+          .gte('created_at', sinceIso)
 
         const [
-          { data: closerScoresRaw },
-          { data: squadScoresRaw },
+          { data: frameworkScoresRaw },
           { data: focusAreasRaw },
           { data: sprintGoalsRaw },
           { data: profileRaw },
         ] = await Promise.all([
-          // TODO: gp_framework_scores join with gp_calls won't work across views — using separate queries
-          // Field mapping: spiced_total → spiced_total (same in GP), closer_email → seller_email in gp_calls
           supabase
             
             .from('framework_scores')
-            .select('spiced_total, created_at')
-            .eq('closer_email', closerEmail)
-            .gte('created_at', eightWeeksAgo.toISOString()),
-          supabase
-            
-            .from('framework_scores')
-            .select('spiced_total, closer_email, created_at')
-            .gte('created_at', eightWeeksAgo.toISOString()),
+            .select('call_id, spiced_total, created_at')
+            .in('call_id', (callsRaw ?? []).map(c => c.id)),
           supabase
             
             .from('pdi_focus_areas')
             .select('*')
-            .eq('closer_email', closerEmail)
-            .order('priority', { ascending: true }),
+            .eq('seller_email', closerEmail)
+            .order('created_at', { ascending: true }),
           supabase
             
             .from('pdi_sprint_goals')
             .select('*')
-            .eq('closer_email', closerEmail)
+            .eq('seller_email', closerEmail)
             .order('created_at', { ascending: true }),
           supabase
             
@@ -104,6 +102,10 @@ export function usePDI(closerEmailParam?: string) {
         }
 
         const weekKeys = Object.keys(weeklyMap)
+        const callOwnerById = new Map((callsRaw ?? []).map(c => [String(c.id), String(c.seller_email || '').toLowerCase()]))
+        const frameworkRows = (frameworkScoresRaw ?? []) as Array<{ call_id: string; spiced_total: number | null; created_at: string }>
+        const closerScoresRaw = frameworkRows.filter(r => callOwnerById.get(String(r.call_id)) === closerEmail.toLowerCase())
+        const squadScoresRaw = frameworkRows
 
         function getWeekIndex(dateStr: string): number {
           const d = new Date(dateStr)
@@ -153,13 +155,13 @@ export function usePDI(closerEmailParam?: string) {
 
         // Map focus areas
         const focusAreas: FocusArea[] = (focusAreasRaw ?? []).map(
-          (r: Record<string, unknown>) => ({
+          (r: Record<string, unknown>, idx: number) => ({
             id: r.id as string,
-            priority: (r.priority as 1 | 2 | 3) ?? 1,
-            dimension: r.dimension as string,
-            currentScore: (r.current_score as number) ?? 0,
-            targetScore: (r.target_score as number) ?? 10,
-            description: (r.description as string) ?? '',
+            priority: ((idx + 1) as 1 | 2 | 3),
+            dimension: (r.area as string) ?? 'Área de foco',
+            currentScore: 0,
+            targetScore: 10,
+            description: (r.status as string) ?? '',
           }),
         )
 
@@ -176,9 +178,9 @@ export function usePDI(closerEmailParam?: string) {
           })
           .map((r: Record<string, unknown>) => ({
             id: r.id as string,
-            goalText: r.goal_text as string,
-            completed: (r.completed as boolean) ?? false,
-            sprintWeek: r.sprint_week as string,
+            goalText: (r.goal as string) ?? '',
+            completed: String(r.status ?? '').toLowerCase() === 'completed' || String(r.status ?? '').toLowerCase() === 'done',
+            sprintWeek: (r.due_date as string) ?? '',
           }))
 
         const profile = profileRaw as { preferred_name?: string | null; email?: string | null } | null
@@ -207,7 +209,7 @@ export function usePDI(closerEmailParam?: string) {
     await supabase
       
       .from('pdi_sprint_goals')
-      .update({ completed })
+      .update({ status: completed ? 'completed' : 'pending' })
       .eq('id', goalId)
 
     setData(prev =>
@@ -232,7 +234,7 @@ export function usePDI(closerEmailParam?: string) {
     const { data: inserted } = await supabase
       
       .from('pdi_sprint_goals')
-      .insert({ closer_email: closerEmail, goal_text: goalText, completed: false, sprint_week: sprintWeek })
+      .insert({ seller_email: closerEmail, goal: goalText, status: 'pending', due_date: sprintWeek })
       .select()
       .single()
 
@@ -246,9 +248,9 @@ export function usePDI(closerEmailParam?: string) {
               ...prev.sprintGoals,
               {
                 id: row.id as string,
-                goalText: row.goal_text as string,
+                goalText: row.goal as string,
                 completed: false,
-                sprintWeek: row.sprint_week as string,
+                sprintWeek: (row.due_date as string) ?? sprintWeek,
               },
             ],
           }

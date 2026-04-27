@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react'
 
 export interface Notification {
   id: string
-  user_id: string
+  user_email: string
   type: 'feedback' | 'assignment' | 'critical_call'
   title: string
   body: string | null
@@ -23,37 +23,48 @@ export interface Notification {
 export const notificationsKeys = {
   all: ['notifications'] as const,
   lists: () => [...notificationsKeys.all, 'list'] as const,
-  list: (userId: string) => [...notificationsKeys.lists(), userId] as const,
+  list: (userEmail: string) => [...notificationsKeys.lists(), userEmail] as const,
   details: () => [...notificationsKeys.all, 'detail'] as const,
   detail: (id: string) => [...notificationsKeys.details(), id] as const,
-  unreadCount: (userId: string) => [...notificationsKeys.all, 'unreadCount', userId] as const,
+  unreadCount: (userEmail: string) => [...notificationsKeys.all, 'unreadCount', userEmail] as const,
 }
 
 // Fetch notifications with debounce
-async function fetchNotifications(userId: string): Promise<Notification[]> {
+async function fetchNotifications(userEmail: string): Promise<Notification[]> {
   const { data, error } = await supabase
     
     .from('notifications')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_email', userEmail)
     .order('created_at', { ascending: false })
     .limit(20)
 
   if (error) throw error
 
-  // Map related_id to call_id/snippet_id based on type
-  const mapped: Notification[] = (data as Notification[]).map((n) => ({
-    ...n,
-    call_id: n.type === 'feedback' || n.type === 'critical_call' ? n.related_id : null,
-    snippet_id: n.type === 'assignment' ? n.related_id : null,
-  }))
+  // DB contract: kind/is_read/user_email. UI contract: type/read.
+  const mapped: Notification[] = (data as Array<Record<string, unknown>>).map((row) => {
+    const type = (row.kind as Notification['type']) || 'feedback'
+    const relatedId = (row as { related_id?: string | null }).related_id ?? null
+    return {
+      id: String(row.id),
+      user_email: String(row.user_email ?? ''),
+      type,
+      title: String(row.title ?? ''),
+      body: (row.body as string | null) ?? null,
+      related_id: relatedId,
+      read: Boolean(row.is_read),
+      created_at: String(row.created_at ?? new Date().toISOString()),
+      call_id: type === 'feedback' || type === 'critical_call' ? relatedId : null,
+      snippet_id: type === 'assignment' ? relatedId : null,
+    }
+  })
 
   return mapped
 }
 
 // Hook for fetching notifications with cache and debounce
 export function useNotificationsQuery() {
-  const [debouncedUserId, setDebouncedUserId] = useState<string | null>(null)
+  const [debouncedUserEmail, setDebouncedUserEmail] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Get current user
@@ -67,18 +78,19 @@ export function useNotificationsQuery() {
   })
   const user = authQuery.data?.user
 
-  // Debounce user ID changes
+  // Debounce user email changes
   useEffect(() => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current)
     }
 
-    if (user?.id) {
+    const userEmail = user?.email?.toLowerCase().trim()
+    if (userEmail) {
       debounceRef.current = setTimeout(() => {
-        setDebouncedUserId(user.id)
+        setDebouncedUserEmail(userEmail)
       }, 300) // 300ms debounce
     } else {
-      setDebouncedUserId(null)
+      setDebouncedUserEmail(null)
     }
 
     return () => {
@@ -86,12 +98,12 @@ export function useNotificationsQuery() {
         clearTimeout(debounceRef.current)
       }
     }
-  }, [user?.id])
+  }, [user?.email])
 
   const result = useQuery({
-    queryKey: notificationsKeys.list(debouncedUserId || ''),
-    queryFn: () => fetchNotifications(debouncedUserId || ''),
-    enabled: !!debouncedUserId,
+    queryKey: notificationsKeys.list(debouncedUserEmail || ''),
+    queryFn: () => fetchNotifications(debouncedUserEmail || ''),
+    enabled: !!debouncedUserEmail,
     staleTime: 2 * 60 * 1000, // 2 minutes
     gcTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
@@ -104,20 +116,20 @@ export function useNotificationsQuery() {
 
   // Separate query for unread count (more efficient for updates)
   const unreadCountQuery = useQuery({
-    queryKey: notificationsKeys.unreadCount(debouncedUserId || ''),
+    queryKey: notificationsKeys.unreadCount(debouncedUserEmail || ''),
     queryFn: async () => {
-      if (!debouncedUserId) return 0
+      if (!debouncedUserEmail) return 0
 
       const { data } = await supabase
         
         .from('notifications')
         .select('id')
-        .eq('user_id', debouncedUserId)
-        .eq('read', false)
+        .eq('user_email', debouncedUserEmail)
+        .eq('is_read', false)
 
       return data?.length || 0
     },
-    enabled: !!debouncedUserId,
+    enabled: !!debouncedUserEmail,
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: 15 * 1000, // 15 seconds
   })
@@ -138,7 +150,7 @@ export function useMarkNotificationRead() {
       const { data, error } = await supabase
         
         .from('notifications')
-        .update({ read })
+        .update({ is_read: read })
         .eq('id', notificationId)
         .select()
         .single()
@@ -156,7 +168,7 @@ export function useMarkNotificationRead() {
       // Invalidate unread count
       queryClient.invalidateQueries({
         queryKey: notificationsKeys.unreadCount(
-          updatedNotification.user_id
+          updatedNotification.user_email
         )
       })
 
@@ -167,7 +179,7 @@ export function useMarkNotificationRead() {
           if (!oldData) return oldData
           return oldData.map(n =>
             n.id === updatedNotification.id
-              ? { ...n, read: updatedNotification.read }
+              ? { ...n, read: Boolean(updatedNotification.is_read) }
               : n
           )
         }
@@ -181,21 +193,21 @@ export function useMarkAllNotificationsRead() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (userId: string) => {
+    mutationFn: async (userEmail: string) => {
       const { data, error } = await supabase
         
         .from('notifications')
-        .update({ read: true })
-        .eq('user_id', userId)
-        .eq('read', false)
+        .update({ is_read: true })
+        .eq('user_email', userEmail)
+        .eq('is_read', false)
 
       if (error) throw error
       return data
     },
-    onSuccess: (_, userId) => {
+    onSuccess: (_, userEmail) => {
       // Invalidate unread count
       queryClient.invalidateQueries({
-        queryKey: notificationsKeys.unreadCount(userId)
+        queryKey: notificationsKeys.unreadCount(userEmail)
       })
 
       // Update all notifications in cache
@@ -204,7 +216,7 @@ export function useMarkAllNotificationsRead() {
         (oldData: Notification[] | undefined) => {
           if (!oldData) return oldData
           return oldData.map(n =>
-            n.user_id === userId ? { ...n, read: true } : n
+            n.user_email === userEmail ? { ...n, read: true } : n
           )
         }
       )
@@ -216,10 +228,10 @@ export function useMarkAllNotificationsRead() {
 export function usePrefetchNotifications() {
   const queryClient = useQueryClient()
 
-  return (userId: string) => {
+  return (userEmail: string) => {
     queryClient.prefetchQuery({
-      queryKey: notificationsKeys.list(userId),
-      queryFn: () => fetchNotifications(userId),
+      queryKey: notificationsKeys.list(userEmail),
+      queryFn: () => fetchNotifications(userEmail),
       staleTime: 2 * 60 * 1000,
     })
   }

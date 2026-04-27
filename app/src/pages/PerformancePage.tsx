@@ -5,7 +5,8 @@ import {
 import { GPDashboardShell } from '../features/growth-platform/pages/GPDashboardShell'
 
 /**
- * Performance — MECE Grupo 1: apenas dashboards GrowthPlatform (schema GrowthPlatform).
+ * Performance — MECE Grupo 1: dashboards GrowthPlatform por papel (executivo, coordenador, gerente+).
+ * Todo usuário autenticado vê o dashboard; a visão muda conforme role em profiles ou user_roles.
  */
 export default function PerformancePage() {
   return (
@@ -15,23 +16,8 @@ export default function PerformancePage() {
   )
 }
 
-function NoGrowthPlatformProfile() {
-  return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="card space-y-4">
-        <h1 className="text-lg font-semibold text-text-primary">Performance indisponível</h1>
-        <p className="text-sm text-text-secondary leading-relaxed">
-          Não encontramos um perfil em <strong>GrowthPlatform.profiles</strong> para esta conta. Um
-          administrador precisa criar ou vincular o perfil no banco atual, ou você pode estar no
-          projeto Supabase errado.
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function PerformancePageContent() {
-  const { role: gpRole, profileLoading } = useGrowthPlatformContext()
+  const { profileLoading } = useGrowthPlatformContext()
 
   if (profileLoading) {
     return (
@@ -48,13 +34,9 @@ function PerformancePageContent() {
     )
   }
 
-  if (gpRole) {
-    return (
-      <div className="relative">
-        <GPDashboardShell />
-      </div>
-    )
-  }
-
-  return <NoGrowthPlatformProfile />
+  return (
+    <div className="relative">
+      <GPDashboardShell />
+    </div>
+  )
 }

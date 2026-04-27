@@ -11,5 +11,7 @@ app/.vite/
 app/playwright-report/
 app/test-results/
 supabase/.temp/
+backups/
+backfill-calls-fase1-mapping.json
 .DS_Store
 Thumbs.db

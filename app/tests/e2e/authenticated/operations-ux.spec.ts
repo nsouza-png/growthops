@@ -18,8 +18,8 @@ test.describe('Operations UX', () => {
 
     await page.goto('/#/operations')
     await expect(page.getByText('Pipeline Health')).toBeVisible()
-    await expect(page.getByText('Databricks enrichment')).toBeVisible()
-    await expect(page.getByText('Ação recomendada')).toBeVisible()
+    await expect(page.getByText('Transparência Databricks')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Atualizar' })).toBeVisible()
   })
 })
 

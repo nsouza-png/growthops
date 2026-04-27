@@ -15,11 +15,17 @@
     "preflight:release": "node scripts/preflight-release.js",
     "merge:analysis": "node scripts/merge-precomputed-analysis.js",
     "merge:analysis:dry-run": "node scripts/merge-precomputed-analysis.js --dry-run --all",
+    "analysis:fill-missing": "node scripts/fill-missing-analyses-batch.js",
+    "gp:backfill:run": "node scripts/gp-backfill-runner.js",
+    "gp:backfill:monitor": "node scripts/gp-backfill-monitor.js",
+    "gp:backfill:validate": "node scripts/gp-backfill-validator.js",
+    "gp:populate:derived": "node scripts/gp-populate-derived-batch.js",
     "backfill:calls": "node scripts/backfill-calls-fase1.js",
     "backfill:calls:dry-run": "node scripts/backfill-calls-fase1.js --dry-run",
     "e2e:authenticated": "npm --prefix app exec -- playwright test --project=chromium tests/e2e/authenticated"
   },
   "devDependencies": {
+    "dotenv": "^17.4.2",
     "supabase": "^2.95.3"
   },
   "dependencies": {

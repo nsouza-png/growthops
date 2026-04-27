@@ -3,7 +3,6 @@ import { AlertTriangle, Clock, DollarSign, Brain, ArrowRight, Info, Phone } from
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { cn } from '../lib/cn'
-import { useRole } from '../contexts/RoleContext'
 import { EmptyState } from '../components/ui/EmptyState'
 import ScoreRing from '../components/ui/ScoreRing'
 
@@ -223,18 +222,7 @@ function Section({ title, count, calls, level, onCallClick }: SectionProps) {
 
 export default function UrgentQueue() {
   const navigate = useNavigate()
-  const { isAdmin, viewedRole } = useRole()
-  const canAccess = isAdmin || viewedRole === 'coordenador'
   const { calls, loading } = useUrgentCalls()
-
-  if (!canAccess) {
-    return (
-      <div className="p-6">
-        <EmptyState icon={AlertTriangle} title="Acesso restrito"
-          description="Apenas coordenadores e admins têm acesso à Fila de Urgência." />
-      </div>
-    )
-  }
 
   const critico = calls.filter(c => c.priority_level === 'critico')
   const atencao = calls.filter(c => c.priority_level === 'atencao')

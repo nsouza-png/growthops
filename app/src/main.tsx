@@ -23,35 +23,47 @@ initMonitoring()
 //   2. PKCE flow (OAuth): ?code=...  (Google OAuth, magic link, etc.)
 // O HashRouter usa # para rotas, então detectSessionInUrl está off — tratamos manualmente.
 async function interceptAuthCallback(): Promise<void> {
-  // ── PKCE flow: Supabase OAuth retorna ?code= na query string ──
-  const url = new URL(window.location.href)
-  const code = url.searchParams.get('code')
-  if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
-      // Limpa query params e vai para app
+  try {
+    // ── PKCE flow: Supabase OAuth retorna ?code= na query string ──
+    const url = new URL(window.location.href)
+    const code = url.searchParams.get('code')
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+      if (error) {
+        console.error('[auth] exchangeCodeForSession:', error.message)
+        window.history.replaceState(null, '', url.pathname + '#/login')
+        return
+      }
       window.history.replaceState(null, '', url.pathname + '#/performance')
+      return
     }
-    return
-  }
 
-  // ── Implicit flow: tokens no hash fragment ──
-  const hash = window.location.hash
-  if (!hash.includes('access_token=')) return
+    // ── Implicit flow: tokens no hash fragment ──
+    const hash = window.location.hash
+    if (!hash.includes('access_token=')) return
 
-  const params = new URLSearchParams(hash.replace(/^#/, ''))
-  const accessToken = params.get('access_token')
-  const refreshToken = params.get('refresh_token')
-  const type = params.get('type')
+    const params = new URLSearchParams(hash.replace(/^#/, ''))
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
+    const type = params.get('type')
 
-  if (!accessToken || !refreshToken) return
+    if (!accessToken || !refreshToken) return
 
-  await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+    const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+    if (error) {
+      console.error('[auth] setSession:', error.message)
+      window.location.hash = '#/login'
+      return
+    }
 
-  if (type === 'recovery') {
-    window.location.hash = '#/reset-password'
-  } else {
-    window.location.hash = '#/performance'
+    if (type === 'recovery') {
+      window.location.hash = '#/reset-password'
+    } else {
+      window.location.hash = '#/performance'
+    }
+  } catch (e) {
+    console.error('[auth] interceptAuthCallback:', e)
+    window.location.hash = '#/login'
   }
 }
 

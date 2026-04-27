@@ -17,6 +17,8 @@ import PerformancePage from './pages/PerformancePage'
 import SmartTrackers from './pages/SmartTrackers'
 import Operations from './pages/Operations'
 import ResetPassword from './pages/ResetPassword'
+import NotFound from './pages/NotFound'
+import { RequireAdmin, RequireAdminOrCoordinator, RequireCoordOrAdmin } from './components/RouteGuards'
 import { useAuth } from './hooks/useAuth'
 import { supabase } from './lib/supabase'
 import { QueryProvider } from './providers/QueryProvider'
@@ -41,33 +43,39 @@ function useOnboardingRedirect(user: ReturnType<typeof useAuth>['user']) {
       return
     }
 
-    let timeoutId: ReturnType<typeof setTimeout>
+    let cancelled = false
 
     async function check() {
-      try {
-        timeoutId = setTimeout(() => setShouldOnboard(false), 10000)
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role, onboarding_completed')
+        .eq('user_id', user!.id)
+        .maybeSingle()
 
-        const { data } = await supabase
-          .from('user_roles')
-          .select('role, onboarding_completed')
-          .eq('user_id', user!.id)
-          .single()
+      if (cancelled) return
 
-        clearTimeout(timeoutId)
+      if (error) {
+        console.error('[Onboarding] user_roles:', error.message)
+        setShouldOnboard(false)
+        return
+      }
 
-        if (data?.role === 'executivo' && data?.onboarding_completed === false) {
-          setShouldOnboard(true)
-        } else {
-          setShouldOnboard(false)
-        }
-      } catch {
-        clearTimeout(timeoutId)
+      if (!data) {
+        setShouldOnboard(true)
+        return
+      }
+
+      if (data.role === 'executivo' && data.onboarding_completed === false) {
+        setShouldOnboard(true)
+      } else {
         setShouldOnboard(false)
       }
     }
 
-    check()
-    return () => { if (timeoutId) clearTimeout(timeoutId) }
+    void check()
+    return () => {
+      cancelled = true
+    }
   }, [user])
 
   return shouldOnboard
@@ -124,14 +132,51 @@ function ProtectedRoutes() {
         <Route path="/pdi/study/:closerEmail?" element={<PDIStudySession />} />
         <Route path="/pdi/library" element={<Library />} />
 
-        {/* ── GRUPO 5: TÁTICO (admin/coord) ────────────────────── */}
-        <Route path="/queue" element={<UrgentQueue />} />
-        <Route path="/operations" element={<Operations />} />
-        <Route path="/settings/trackers" element={<SmartTrackers />} />
+        {/* ── GRUPO 5: TÁTICO (admin/coord) — guard na rota, não só no menu ─ */}
+        <Route
+          path="/queue"
+          element={(
+            <RequireAdminOrCoordinator>
+              <UrgentQueue />
+            </RequireAdminOrCoordinator>
+          )}
+        />
+        <Route
+          path="/operations"
+          element={(
+            <RequireAdmin>
+              <Operations />
+            </RequireAdmin>
+          )}
+        />
+        <Route
+          path="/settings/trackers"
+          element={(
+            <RequireAdmin>
+              <SmartTrackers />
+            </RequireAdmin>
+          )}
+        />
 
         {/* ── RODAPÉ: GESTÃO ───────────────────────────────────── */}
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/users" element={<UserManagement />} />
+        <Route
+          path="/settings"
+          element={(
+            <RequireCoordOrAdmin>
+              <Settings />
+            </RequireCoordOrAdmin>
+          )}
+        />
+        <Route
+          path="/settings/users"
+          element={(
+            <RequireAdmin>
+              <UserManagement />
+            </RequireAdmin>
+          )}
+        />
+
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
   )

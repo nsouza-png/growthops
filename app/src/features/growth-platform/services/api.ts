@@ -4,6 +4,7 @@
 
 import { gpSupabase } from '../../../lib/gpSupabase'
 import type {
+  GPRole,
   GrowthPlatformProfile,
   GrowthPlatformCall,
   GrowthPlatformCallFollowup,
@@ -21,6 +22,35 @@ import type {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = gpSupabase as any
 
+const GP_ROLES: GPRole[] = ['executivo', 'coordenador', 'gerente', 'diretor', 'sales_ops', 'admin']
+
+/** Map DB row (canonical uses full_name; app types use name + optional columns). */
+function mapDbProfileRow(row: Record<string, unknown> | null): GrowthPlatformProfile | null {
+  if (!row?.id) return null
+  const email = String(row.email ?? '').toLowerCase().trim()
+  const rawName = row.name ?? row.full_name
+  const name =
+    typeof rawName === 'string' && rawName.trim()
+      ? rawName.trim()
+      : (email.split('@')[0] ?? 'user').replace(/[._]/g, ' ')
+  let role = String(row.role ?? 'executivo').trim() as GPRole
+  if (!GP_ROLES.includes(role)) role = 'executivo'
+  return {
+    id: String(row.id),
+    email: email || String(row.id),
+    name,
+    cargo: typeof row.cargo === 'string' ? row.cargo : '',
+    role,
+    squad: typeof row.squad === 'string' ? row.squad : null,
+    setor: typeof row.setor === 'string' ? row.setor : null,
+    lider_direto: typeof row.lider_direto === 'string' ? row.lider_direto : null,
+    data_entrada: typeof row.data_entrada === 'string' ? row.data_entrada : null,
+    is_active: row.is_active !== false,
+    created_at: String(row.created_at ?? ''),
+    updated_at: String(row.updated_at ?? ''),
+  }
+}
+
 export class GrowthPlatformAPI {
 
   // ── Profiles ──────────────────────────────────────────────────────────────
@@ -37,7 +67,7 @@ export class GrowthPlatformAPI {
       console.error('[GP] getProfileByAuthId error:', error.message)
       return null
     }
-    return data as GrowthPlatformProfile
+    return mapDbProfileRow(data as Record<string, unknown> | null)
   }
 
   static async getProfileByEmail(email: string): Promise<GrowthPlatformProfile | null> {
@@ -54,7 +84,7 @@ export class GrowthPlatformAPI {
       console.error('[GP] getProfileByEmail error:', error.message)
       return null
     }
-    return data as GrowthPlatformProfile
+    return mapDbProfileRow(data as Record<string, unknown> | null)
   }
 
   static async getSquadProfiles(squad: string): Promise<GrowthPlatformProfile[]> {
@@ -70,7 +100,9 @@ export class GrowthPlatformAPI {
       console.error('[GP] getSquadProfiles error:', error.message)
       return []
     }
-    return (data ?? []) as GrowthPlatformProfile[]
+    return (data ?? [])
+      .map((r: Record<string, unknown>) => mapDbProfileRow(r))
+      .filter((p: GrowthPlatformProfile | null): p is GrowthPlatformProfile => p !== null)
   }
 
   static async getAllActiveProfiles(): Promise<GrowthPlatformProfile[]> {
@@ -85,7 +117,9 @@ export class GrowthPlatformAPI {
       console.error('[GP] getAllActiveProfiles error:', error.message)
       return []
     }
-    return (data ?? []) as GrowthPlatformProfile[]
+    return (data ?? [])
+      .map((r: Record<string, unknown>) => mapDbProfileRow(r))
+      .filter((p: GrowthPlatformProfile | null): p is GrowthPlatformProfile => p !== null)
   }
 
   // ── Calls ─────────────────────────────────────────────────────────────────

@@ -64,7 +64,7 @@ export function GrowthPlatformProvider({ children }: { children: ReactNode }) {
   const [filters, setFiltersState] = useState<GPCallFilters>(DEFAULT_FILTERS)
   const [timeframe, setTimeframe] = useState<'7d' | '30d' | '90d'>('30d')
 
-  // Squad data — only loaded for coord+ roles
+  // Squad data — coord+ (role from profile or session fallback from user_roles)
   const squadEnabled = !!profile && gpCanViewSquad(profile.role)
   const { data: squadData, isLoading: squadLoading } = useSquadAnalytics({
     profile: squadEnabled ? profile : null,

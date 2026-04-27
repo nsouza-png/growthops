@@ -43,21 +43,36 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    setLoading(true)
+    setRealRole(null)
+    let cancelled = false
+
     supabase
       
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .single()
-      .then(({ data }) => {
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) {
+          console.error('[RoleProvider] user_roles:', error.message)
+          setRealRole('executivo')
+          setViewedRoleState('executivo')
+          setLoading(false)
+          return
+        }
         const role = (data?.role as AppRole) ?? 'executivo'
         setRealRole(role)
-        // If not admin, force viewedRole = realRole (can't impersonate)
         if (role !== 'admin') {
           setViewedRoleState(role)
         }
         setLoading(false)
       })
+
+    return () => {
+      cancelled = true
+    }
   }, [user])
 
   function setViewedRole(r: AppRole) {

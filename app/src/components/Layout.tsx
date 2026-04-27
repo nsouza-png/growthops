@@ -60,7 +60,8 @@ function NavItem({ to, icon: Icon, label, active }: { to: string; icon: React.El
 }
 
 export default function Layout() {
-  const { isAdmin } = useRole()
+  const { isAdmin, realRole, loading: roleLoading } = useRole()
+  const canOpenSettings = !roleLoading && (isAdmin || realRole === 'coordenador')
   const { dark, toggle } = useDarkMode()
 
   // Mark /pdi active for all sub-routes (/pdi/library, /pdi/study/*)
@@ -96,7 +97,9 @@ export default function Layout() {
 
         {/* Footer: Gestão + utilidades */}
         <div className="p-2 pb-4 flex flex-col items-center gap-2 border-t border-border pt-3">
-          <NavItem to="/settings" icon={Settings} label="Configurações" />
+          {canOpenSettings && (
+            <NavItem to="/settings" icon={Settings} label="Configurações" />
+          )}
           {isAdmin && <NavItem to="/settings/trackers" icon={Radar} label="Smart Trackers" />}
           <RoleSwitcher />
           <NotificationBell />

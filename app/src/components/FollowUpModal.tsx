@@ -10,6 +10,7 @@ interface FollowUpModalProps {
 
 export function FollowUpModal({ callId, onClose }: FollowUpModalProps) {
   const [loading, setLoading] = useState(false)
+  const [emailSubject, setEmailSubject] = useState<string | null>(null)
   const [emailText, setEmailText] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -21,6 +22,7 @@ export function FollowUpModal({ callId, onClose }: FollowUpModalProps) {
         if (fnError || !data?.ok) {
           setError('Nao foi possivel gerar o follow-up. Tente novamente.')
         } else {
+          setEmailSubject(data.subject ?? null)
           setEmailText(data.email)
         }
       })
@@ -29,7 +31,8 @@ export function FollowUpModal({ callId, onClose }: FollowUpModalProps) {
 
   async function copyToClipboard() {
     if (!emailText) return
-    await navigator.clipboard.writeText(emailText)
+    const subjectLine = (emailSubject && emailSubject.trim()) ? `Assunto: ${emailSubject.trim()}\n\n` : ''
+    await navigator.clipboard.writeText(`${subjectLine}${emailText}`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -63,12 +66,21 @@ export function FollowUpModal({ callId, onClose }: FollowUpModalProps) {
             </div>
           )}
           {emailText && !loading && (
-            <textarea
-              value={emailText}
-              onChange={e => setEmailText(e.target.value)}
-              rows={12}
-              className="w-full bg-bg-card2 border border-border rounded-xl px-3 py-2.5 text-xs font-mono text-text-primary focus:outline-none focus:border-border-mid resize-none leading-relaxed"
-            />
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={emailSubject ?? ''}
+                onChange={e => setEmailSubject(e.target.value)}
+                placeholder="Assunto do email"
+                className="w-full bg-bg-elevated border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-border-mid"
+              />
+              <textarea
+                value={emailText}
+                onChange={e => setEmailText(e.target.value)}
+                rows={10}
+                className="w-full bg-bg-card2 border border-border rounded-xl px-3 py-2.5 text-xs font-mono text-text-primary focus:outline-none focus:border-border-mid resize-none leading-relaxed"
+              />
+            </div>
           )}
         </div>
 

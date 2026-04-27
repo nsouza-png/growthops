@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 
 export interface Notification {
   id: string
-  user_id: string
+  user_email: string
   type: 'feedback' | 'assignment' | 'critical_call'
   title: string
   body: string | null
@@ -39,7 +39,8 @@ export function useNotifications() {
     lastFetchTimeRef.current = now
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
+    const userEmail = user?.email?.toLowerCase().trim()
+    if (!user || !userEmail) {
       setLoading(false)
       return
     }
@@ -48,17 +49,28 @@ export function useNotifications() {
       
       .from('notifications')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_email', userEmail)
       .order('created_at', { ascending: false })
       .limit(20)
 
     if (!error && data) {
-      // Map related_id to call_id/snippet_id based on type
-      const mapped: Notification[] = (data as Notification[]).map((n) => ({
-        ...n,
-        call_id: n.type === 'feedback' || n.type === 'critical_call' ? n.related_id : null,
-        snippet_id: n.type === 'assignment' ? n.related_id : null,
-      }))
+      // DB contract uses kind/is_read/user_email; UI expects type/read/related_id.
+      const mapped: Notification[] = (data as Array<Record<string, unknown>>).map((row) => {
+        const type = (row.kind as Notification['type']) || 'feedback'
+        const relatedId = (row as { related_id?: string | null }).related_id ?? null
+        return {
+          id: String(row.id),
+          user_email: String(row.user_email ?? ''),
+          type,
+          title: String(row.title ?? ''),
+          body: (row.body as string | null) ?? null,
+          related_id: relatedId,
+          read: Boolean(row.is_read),
+          created_at: String(row.created_at ?? new Date().toISOString()),
+          call_id: type === 'feedback' || type === 'critical_call' ? relatedId : null,
+          snippet_id: type === 'assignment' ? relatedId : null,
+        }
+      })
       setNotifications(mapped)
       setUnreadCount(mapped.filter(n => !n.read).length)
     }
@@ -73,7 +85,8 @@ export function useNotifications() {
     let cleanup: (() => void) | undefined
 
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
+      const userEmail = user?.email?.toLowerCase().trim()
+      if (!user || !userEmail) return
 
       const channel = supabase
         .channel('notifications-realtime')
@@ -81,9 +94,9 @@ export function useNotifications() {
           'postgres_changes',
           {
             event: 'INSERT',
-            schema: 'public',
-            table: 'gp_notifications',
-            filter: `user_id=eq.${user.id}`,
+            schema: 'GrowthPlatform',
+            table: 'notifications',
+            filter: `user_email=eq.${userEmail}`,
           },
           () => {
             fetchNotifications()
@@ -109,7 +122,7 @@ export function useNotifications() {
     await supabase
       
       .from('notifications')
-      .update({ read: true })
+      .update({ is_read: true })
       .eq('id', id)
 
     setNotifications(prev =>
@@ -120,14 +133,15 @@ export function useNotifications() {
 
   const markAllRead = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const userEmail = user?.email?.toLowerCase().trim()
+    if (!user || !userEmail) return
 
     await supabase
       
       .from('notifications')
-      .update({ read: true })
-      .eq('user_id', user.id)
-      .eq('read', false)
+      .update({ is_read: true })
+      .eq('user_email', userEmail)
+      .eq('is_read', false)
 
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
     setUnreadCount(0)

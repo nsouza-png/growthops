@@ -230,6 +230,7 @@ export default function Onboarding() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const firstName = user?.email
     ? (() => {
@@ -241,14 +242,14 @@ export default function Onboarding() {
 
   async function completeOnboarding(preferredName?: string, mainProduct?: string) {
     if (!user) return
-    await supabase
-      
-      .from('user_roles')
-      .update({
-        onboarding_completed: true,
-        ...(preferredName ? { preferred_name: preferredName } : {}),
-      })
-      .eq('user_id', user.id)
+    setSubmitError(null)
+    const { error } = await supabase.rpc('complete_user_onboarding', {
+      p_preferred_name: preferredName?.trim() || null,
+    })
+    if (error) {
+      setSubmitError('Não foi possível concluir o onboarding agora. Tente novamente em alguns segundos.')
+      return
+    }
     navigate('/performance', { replace: true })
   }
 
@@ -270,6 +271,11 @@ export default function Onboarding() {
             onComplete={(name, product) => completeOnboarding(name, product)}
             onSkip={() => completeOnboarding()}
           />
+        )}
+        {submitError && (
+          <p className="mt-4 text-xs text-signal-red bg-signal-red/10 border border-signal-red/20 rounded-lg px-3 py-2">
+            {submitError}
+          </p>
         )}
       </div>
     </div>

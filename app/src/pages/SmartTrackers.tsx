@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Navigate } from 'react-router-dom'
 import { Radar, Plus, Pencil, Trash2, Power, X, Search, Filter } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../lib/cn'
-import { useRole } from '../contexts/RoleContext'
 import type { SmartTracker } from '../types/database'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -293,17 +291,12 @@ function TrackerCard({ tracker, onEdit, onToggle, onDelete }: TrackerCardProps) 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function SmartTrackers() {
-  const { isAdmin } = useRole()
   const { trackers, loading, create, update, remove } = useSmartTrackers()
   const [search, setSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState<TrackerCategory | 'all'>('all')
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<SmartTracker | null>(null)
   const [deleting, setDeleting] = useState<SmartTracker | null>(null)
-
-  if (!isAdmin) {
-    return <Navigate to="/performance" replace />
-  }
 
   const filtered = trackers.filter(t => {
     if (filterCategory !== 'all' && t.category !== filterCategory) return false

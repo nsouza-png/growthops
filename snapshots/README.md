@@ -2,6 +2,8 @@
 
 Purpose: keep a **versioned SQL snapshot** of the `GrowthPlatform` schema (or the canonical baseline copy) to compare before/after Supabase deploy.
 
+> O arquivo `baseline-fallback-*.sql` foi removido do repo: a fonte canônica de schema é `supabase/migrations/20260426010000_baseline_canonical.sql`. Use os comandos abaixo para gerar um snapshot novo quando precisar.
+
 ## Commands
 
 From project root:

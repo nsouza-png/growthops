@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { Navigate } from 'react-router-dom'
 import { Users, Shield, UserCheck, Plus, Search, ChevronDown, Check, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../lib/cn'
@@ -245,10 +244,6 @@ export default function UserManagement() {
   const { members, loading, updateMember, deactivateMember, reload } = useTeamMembers()
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
-
-  if (!isAdmin) {
-    return <Navigate to="/performance" replace />
-  }
 
   const filtered = members.filter(m => {
     if (!search) return true

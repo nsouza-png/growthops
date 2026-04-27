@@ -12,7 +12,7 @@ import { GPManagerDashboard } from './GPManagerDashboard'
  * Expects to be rendered inside a GrowthPlatformProvider — does NOT mount one itself.
  */
 export function GPDashboardShell() {
-  const { role, profileLoading, profileError } = useGrowthPlatformContext()
+  const { role, profileLoading } = useGrowthPlatformContext()
 
   if (profileLoading) {
     return (
@@ -30,13 +30,10 @@ export function GPDashboardShell() {
     )
   }
 
-  if (profileError || !role) {
-    // User not in GrowthPlatform.profiles — render nothing (caller shows fallback)
-    return null
-  }
-
-  if (role === 'executivo') return <GPExecutiveDashboard />
-  if (role === 'coordenador') return <GPCoordinatorDashboard />
+  // Visão por papel: executivo (individual), coordenador (squad), gerente+ (estratégico).
+  const r = role ?? 'executivo'
+  if (r === 'executivo') return <GPExecutiveDashboard />
+  if (r === 'coordenador') return <GPCoordinatorDashboard />
 
   // gerente | diretor | sales_ops | admin
   return <GPManagerDashboard />
