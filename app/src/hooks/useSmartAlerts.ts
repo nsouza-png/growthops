@@ -84,6 +84,7 @@ const ALERT_PATTERNS: AlertPattern[] = [
 export function useSmartAlerts() {
   const [alerts, setAlerts] = useState<SmartAlert[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [patterns, setPatterns] = useState<AlertPattern[]>(ALERT_PATTERNS)
   const { viewedRole, simulatedCloser } = useRole()
 
@@ -208,7 +209,12 @@ export function useSmartAlerts() {
 
       const { data: rawInsights, error } = await query
 
-      if (error) throw error
+      if (error) {
+        setError(error.message)
+        throw error
+      }
+
+      setError(null)
 
       // Backfill score_geral e created_at para compatibilidade com InsightRow
       const insights = (rawInsights || []).map(r => ({
@@ -234,8 +240,10 @@ export function useSmartAlerts() {
           return severityOrder[b.severity] - severityOrder[a.severity]
         })
       })
-    } catch (error) {
-      console.error('Error analyzing alerts:', error)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao analisar alertas'
+      setError(msg)
+      console.error('Error analyzing alerts:', err)
     } finally {
       setLoading(false)
     }
@@ -336,6 +344,7 @@ export function useSmartAlerts() {
   return {
     alerts,
     loading,
+    error,
     unacknowledgedBySeverity,
     acknowledgeAlert,
     addActionToAlert,

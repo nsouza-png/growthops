@@ -5,6 +5,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useRole } from '../contexts/RoleContext'
+import { logError } from '../lib/logger'
 import type { Database } from '../types/database'
 
 // Type para a view unificada (baseado em insights_calls_ae + campos enriquecidos)
@@ -167,7 +168,7 @@ export function useUnifiedCalls(opts: UnifiedCallsOptions = {}) {
 
       setRows((data ?? []) as unknown as UnifiedCall[])
     } catch (err) {
-      console.error('Error fetching unified calls:', err)
+      logError('useUnifiedCalls', err, { limit, vendedor, daysAgo })
       setError(err instanceof Error ? err.message : 'Falha ao carregar calls unificadas')
       setRows([])
     } finally {

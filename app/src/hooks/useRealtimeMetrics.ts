@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useRole } from '../contexts/RoleContext'
+import { logError } from '../lib/logger'
 
 export interface RealtimeMetrics {
   totalCalls: number
@@ -112,7 +113,7 @@ export function useRealtimeMetrics() {
         lastUpdated: new Date().toISOString()
       }))
     } catch (err) {
-      console.error('Error fetching metrics:', err)
+      logError('useRealtimeMetrics.fetchMetrics', err)
       setError(err instanceof Error ? err.message : 'Erro ao carregar métricas')
     }
   }, [viewedRole, simulatedCloser])
@@ -188,7 +189,7 @@ export function useRealtimeMetrics() {
             'postgres_changes',
             {
               event: '*',
-              schema: 'public',
+              schema: 'GrowthPlatform',
               table: 'calls'
             },
             () => {
@@ -200,8 +201,8 @@ export function useRealtimeMetrics() {
             'postgres_changes',
             {
               event: '*',
-              schema: 'public',
-              table: 'gp_call_feedback'
+              schema: 'GrowthPlatform',
+              table: 'call_feedback'
             },
             () => {
               // Refetch metrics when feedback changes
@@ -220,7 +221,7 @@ export function useRealtimeMetrics() {
         subscriptionRef.current = channel
         metricsChannelRef.current = channel
       } catch (err) {
-        console.error('Error setting up subscription:', err)
+        logError('useRealtimeMetrics.setupSubscription', err)
         setError('Falha ao configurar atualizações em tempo real')
         setIsConnected(false)
       }
