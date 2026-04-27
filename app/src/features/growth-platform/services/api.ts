@@ -30,8 +30,8 @@ export class GrowthPlatformAPI {
       
       .from('profiles')
       .select('*')
-      .eq('auth_user_id', authUserId)
-      .single()
+      .eq('id', authUserId)
+      .maybeSingle()
 
     if (error) {
       console.error('[GP] getProfileByAuthId error:', error.message)
@@ -45,8 +45,10 @@ export class GrowthPlatformAPI {
       
       .from('profiles')
       .select('*')
-      .eq('email', email)
-      .single()
+      .eq('email', email.toLowerCase().trim())
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
     if (error) {
       console.error('[GP] getProfileByEmail error:', error.message)

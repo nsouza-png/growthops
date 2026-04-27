@@ -22,7 +22,6 @@ export interface GPProfile {
   lider_direto: string | null
   data_entrada: string | null    // DATE as ISO string
   is_active: boolean
-  auth_user_id: string | null   // UUID linked to auth.users
   created_at: string
   updated_at: string
 }

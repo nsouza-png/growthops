@@ -28,7 +28,7 @@ export function useGrowthPlatform(): UseGrowthPlatformReturn {
     setLoading(true)
     setError(null)
 
-    // Primary: lookup by auth_user_id (populated when user has logged in before)
+    // Primary: profiles.id is the same UUID as auth.users.id in canonical schema.
     let data = await GrowthPlatformAPI.getProfileByAuthId(user.id)
 
     // Fallback: lookup by email for profiles synced before first login

@@ -74,7 +74,6 @@ export interface GrowthPlatformProfile {
   lider_direto: string | null
   data_entrada: string | null
   is_active: boolean
-  auth_user_id: string | null
   created_at: string
   updated_at: string
 }
