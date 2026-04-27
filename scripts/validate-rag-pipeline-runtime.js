@@ -7,8 +7,7 @@
  *
  * Optional first step (server must have TLDV_API_KEY):
  *   RUN_FETCH_TRANSCRIPT=1  → invokes fetch-transcript (skipped by edge if already fetched)
- *
- * Env:
+ *require('dotenv').config() * Env:
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (required)
  *   E2E_RAG_CALL_ID or argv[2] (required)
  *   RAG_POLL_MS (default 3000), RAG_POLL_MAX (default 40)

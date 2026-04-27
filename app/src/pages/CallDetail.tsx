@@ -254,6 +254,7 @@ function ClassificationBadge({ result }: { result: string }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function CallDetail() {
   const { callId } = useParams()
+  const isUuid = !!callId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(callId)
   const navigate = useNavigate()
   const { call, loading } = useCall(callId)
   const { user } = useAuth()
@@ -270,11 +271,11 @@ export default function CallDetail() {
   const [excerptText, setExcerptText] = useState('')
 
   useEffect(() => {
-    if (!callId) return
+    if (!callId || !isUuid) return
     supabase
       .from('call_feedback').select('*').eq('call_id', callId).order('created_at')
       .then(({ data }) => setFeedback(data ?? []))
-  }, [callId])
+  }, [callId, isUuid])
 
   async function submitFeedback() {
     if (!newComment.trim() || !callId) return

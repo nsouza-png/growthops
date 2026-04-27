@@ -5,6 +5,7 @@ const crypto = require('crypto')
 const { createClient } = require('@supabase/supabase-js')
 const { RecursiveCharacterTextSplitter } = require('@langchain/textsplitters')
 const { OpenAIEmbeddings } = require('@langchain/openai')
+require('dotenv').config()
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -16,10 +17,20 @@ const argv = process.argv.slice(2)
 const SOURCE_ARG = argv.find((arg) => !arg.startsWith('-'))
 const SOURCE_DIR = SOURCE_ARG || process.env.RAG_SOURCE_DIR || path.resolve(__dirname, '..', '..', 'skills')
 const DRY_RUN = process.argv.includes('--dry-run') || process.env.RAG_DRY_RUN === '1'
+const MODE = (process.env.MODE || '').toLowerCase()
+const SKILLS_ONLY_MODE = MODE === 'skills_only'
 
 if (!DRY_RUN && (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !OPENAI_API_KEY)) {
   console.error('Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY')
   process.exit(1)
+}
+
+if (SKILLS_ONLY_MODE) {
+  const normalizedSourceDir = SOURCE_DIR.replace(/\\/g, '/').toLowerCase()
+  if (!normalizedSourceDir.includes('/skills') && !normalizedSourceDir.endsWith('skills')) {
+    console.error(`[guardrail] MODE=skills_only blocks non-skills source: ${SOURCE_DIR}`)
+    process.exit(1)
+  }
 }
 
 const supabase = DRY_RUN

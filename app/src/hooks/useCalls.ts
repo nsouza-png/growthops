@@ -46,9 +46,14 @@ export function useCalls(limit = 50) {
 export function useCall(callId: string | undefined) {
   const [call, setCall] = useState<CallRow | null>(null)
   const [loading, setLoading] = useState(true)
+  const isUuid = !!callId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(callId)
 
   useEffect(() => {
-    if (!callId) return
+    if (!callId || !isUuid) {
+      setCall(null)
+      setLoading(false)
+      return
+    }
     supabase
       
       .from('calls')
@@ -59,7 +64,7 @@ export function useCall(callId: string | undefined) {
         setCall(data as unknown as CallRow)
         setLoading(false)
       })
-  }, [callId])
+  }, [callId, isUuid])
 
   return { call, loading }
 }

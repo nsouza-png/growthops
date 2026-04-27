@@ -34,6 +34,12 @@ const ALL_MODE = argv.includes('--all')
 const dirIdx = argv.indexOf('--dir')
 const SOURCE_DIR = dirIdx !== -1 ? argv[dirIdx + 1] : process.env.RAG_SOURCE_DIR
 const SINGLE_CALL_ID = argv.find((a) => !a.startsWith('-') && a.length > 10)
+const MODE = (process.env.MODE || '').toLowerCase()
+
+if (MODE === 'skills_only') {
+  console.error('[guardrail] MODE=skills_only blocks merge:analysis execution.')
+  process.exit(1)
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,13 +62,33 @@ function mergeKeepExisting(existing, incoming) {
   return result
 }
 
-async function logPipelineEvent(call_id, step, status, payload = {}) {
+function pickNumber(value) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
+}
+
+function pickScore(obj, key) {
+  if (!obj || typeof obj !== 'object') return null
+  const item = obj[key]
+  if (item && typeof item === 'object' && 'score' in item) return pickNumber(item.score)
+  return pickNumber(item)
+}
+
+function buildSparsePatch(existing, incoming) {
+  const patch = {}
+  for (const [k, v] of Object.entries(incoming)) {
+    if (v === null || v === undefined) continue
+    if (isNullOrEmpty(existing[k])) patch[k] = v
+  }
+  return patch
+}
+
+async function logPipelineEvent(call_id, step, status) {
   if (DRY_RUN) return
   const { error } = await supabase.from('pipeline_events').insert({
     call_id,
     step,
     status,
-    payload,
     duration_ms: 0,
   })
   if (error) console.warn(`pipeline_events insert failed: ${error.message}`)
@@ -102,12 +128,17 @@ async function mergeAnalysis(callId, analysisJson) {
 
     const incoming = {
       call_id: callId,
-      spiced_summary: spiced?.summary || spiced || null,
-      spin_summary: spin?.summary || spin || null,
-      challenger_summary: challenger?.summary || challenger || null,
-      summary: consolidated?.summary || null,
-      risk_signals: consolidated?.risks || consolidated?.risk_signals || null,
-      next_steps: consolidated?.next_steps || null,
+      summary_text:
+        consolidated?.summary ||
+        spiced?.summary ||
+        spin?.summary ||
+        challenger?.summary ||
+        null,
+      client_pains: consolidated?.client_pains || consolidated?.pains || null,
+      next_steps: consolidated?.next_steps || consolidated?.deal_next_steps || null,
+      objections: consolidated?.objections || null,
+      churn_signals: consolidated?.risks || consolidated?.risk_signals || null,
+      buy_intent_signals: consolidated?.buy_intent_signals || null,
       rag_sources: ['precomputed_analysis'],
       rag_last_updated_at: new Date().toISOString(),
     }
@@ -121,13 +152,11 @@ async function mergeAnalysis(callId, analysisJson) {
         changes.push('call_analysis:would_create')
       }
     } else {
-      const merged = mergeKeepExisting(existingCA, incoming)
-      const diff = Object.keys(merged).filter(
-        (k) => JSON.stringify(merged[k]) !== JSON.stringify(existingCA[k])
-      )
+      const patch = buildSparsePatch(existingCA, incoming)
+      const diff = Object.keys(patch)
       if (diff.length > 0) {
         if (!DRY_RUN) {
-          const { error } = await supabase.from('call_analysis').update(merged).eq('call_id', callId)
+          const { error } = await supabase.from('call_analysis').update(patch).eq('call_id', callId)
           if (error) console.warn(`  call_analysis update error: ${error.message}`)
           else changes.push(`call_analysis:filled(${diff.join(',')})`)
         } else {
@@ -138,71 +167,56 @@ async function mergeAnalysis(callId, analysisJson) {
   }
 
   // 3. Merge em framework_scores (spiced/spin/challenger scores)
-  const frameworks = ['spiced', 'spin', 'challenger']
-  for (const fw of frameworks) {
-    const fwData = analysisJson[fw]
-    if (!fwData || !fwData.scores) continue
+  const { data: existingScore } = await supabase
+    .from('framework_scores')
+    .select('*')
+    .eq('call_id', callId)
+    .maybeSingle()
 
-    const { data: existingScore } = await supabase
-      .from('framework_scores')
-      .select('*')
-      .eq('call_id', callId)
-      .eq('framework', fw)
-      .maybeSingle()
-
-    const incoming = {
-      call_id: callId,
-      framework: fw,
-      scores: fwData.scores,
-      total_score: fwData.total_score || fwData.score || null,
-      metadata: { origin: 'precomputed_analysis' },
+  const spicedScores = analysisJson.spiced?.scores || {}
+  const spinScores = analysisJson.spin?.scores || {}
+  const challengerScores = analysisJson.challenger?.scores || {}
+  const incomingScores = {
+    call_id: callId,
+    spiced_situation: pickScore(spicedScores, 'situation'),
+    spiced_pain: pickScore(spicedScores, 'pain'),
+    spiced_impact: pickScore(spicedScores, 'impact'),
+    spiced_critical_event: pickScore(spicedScores, 'critical_event'),
+    spiced_decision: pickScore(spicedScores, 'decision'),
+    spiced_total: pickNumber(analysisJson.spiced?.score_total),
+    spin_situation: pickScore(spinScores, 'situation'),
+    spin_problem: pickScore(spinScores, 'problem'),
+    spin_implication: pickScore(spinScores, 'implication'),
+    spin_need_payoff: pickScore(spinScores, 'need_payoff'),
+    spin_total: pickNumber(analysisJson.spin?.score_total),
+    challenger_teach: pickScore(challengerScores, 'teach'),
+    challenger_tailor: pickScore(challengerScores, 'tailor'),
+    challenger_take_control: pickScore(challengerScores, 'take_control'),
+    challenger_total: pickNumber(analysisJson.challenger?.score_total),
+  }
+  if (!existingScore) {
+    if (!DRY_RUN) {
+      const { error } = await supabase.from('framework_scores').insert(incomingScores)
+      if (error) console.warn(`  framework_scores insert error: ${error.message}`)
+      else changes.push('framework_scores:created')
+    } else {
+      changes.push('framework_scores:would_create')
     }
-
-    if (!existingScore) {
+  } else {
+    const scorePatch = buildSparsePatch(existingScore, incomingScores)
+    if (Object.keys(scorePatch).length > 0) {
       if (!DRY_RUN) {
-        const { error } = await supabase.from('framework_scores').insert(incoming)
-        if (error) console.warn(`  framework_scores(${fw}) insert error: ${error.message}`)
-        else changes.push(`framework_scores:${fw}:created`)
+        const { error } = await supabase.from('framework_scores').update(scorePatch).eq('call_id', callId)
+        if (error) console.warn(`  framework_scores update error: ${error.message}`)
+        else changes.push(`framework_scores:filled(${Object.keys(scorePatch).join(',')})`)
       } else {
-        changes.push(`framework_scores:${fw}:would_create`)
+        changes.push(`framework_scores:would_fill(${Object.keys(scorePatch).join(',')})`)
       }
     }
   }
 
-  // 4. Merge behavior_signals
-  const bsData = analysisJson.behavior_signals
-  if (bsData && Array.isArray(bsData) && bsData.length > 0) {
-    const { data: existingBS } = await supabase
-      .from('behavior_signals')
-      .select('id')
-      .eq('call_id', callId)
-      .limit(1)
-
-    if (!existingBS || existingBS.length === 0) {
-      const payload = bsData.map((sig) => ({
-        call_id: callId,
-        signal_type: sig.type || sig.signal_type || 'unknown',
-        signal_value: sig.value || sig.signal_value || null,
-        confidence: sig.confidence || null,
-        metadata: { origin: 'precomputed_analysis', ...sig },
-      }))
-      if (!DRY_RUN) {
-        const { error } = await supabase.from('behavior_signals').insert(payload)
-        if (error) console.warn(`  behavior_signals insert error: ${error.message}`)
-        else changes.push(`behavior_signals:created(${payload.length})`)
-      } else {
-        changes.push(`behavior_signals:would_create(${payload.length})`)
-      }
-    }
-  }
-
-  // 5. Registrar pipeline_event
-  const duration_ms = Date.now() - started
-  await logPipelineEvent(callId, 'merge_precomputed_analysis', 'success', {
-    changes,
-    origin: 'analises_prontas',
-    duration_ms,
-  })
+  // 4. Registrar pipeline_event
+  await logPipelineEvent(callId, 'merge_precomputed_analysis', 'success')
 
   return { callId, result: changes.length > 0 ? 'merged' : 'noop', changes }
 }

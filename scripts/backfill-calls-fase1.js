@@ -20,6 +20,7 @@ const argv = process.argv.slice(2)
 const DRY_RUN = argv.includes('--dry-run')
 const batchIdx = argv.indexOf('--batch-size')
 const BATCH_SIZE = batchIdx !== -1 ? Number(argv[batchIdx + 1]) : 200
+const MODE = (process.env.MODE || '').toLowerCase()
 
 const CALLS_DIR = process.env.CALLS_DIR ||
   'C:\\Users\\n.souza_g4educacao\\Documents\\G4OS GROWTH OPS FULL\\estudos\\analises-calls\\calls_extraidas'
@@ -37,6 +38,11 @@ const MAPPING_PATH = path.join(
 
 if (!DRY_RUN && (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY)) {
   console.error('Missing env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY')
+  process.exit(1)
+}
+
+if (MODE === 'skills_only') {
+  console.error('[guardrail] MODE=skills_only blocks backfill:calls execution.')
   process.exit(1)
 }
 

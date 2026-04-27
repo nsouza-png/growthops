@@ -6,6 +6,7 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (required)
  *   STUCK_MINUTES (default 15)
  */
+require('dotenv').config()
 
 const { createClient } = require('@supabase/supabase-js')
 
