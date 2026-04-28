@@ -1,4 +1,9 @@
 /* eslint-disable no-console */
+try {
+  require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') })
+} catch (_) {
+  /* optional */
+}
 /**
  * backfill-calls-fase1.js
  *
@@ -242,9 +247,23 @@ async function main() {
   }
 
   // 2. Buscar IDs já existentes para não sobrescrever
+  // PostgREST default limit is 1000 — paginate to get all rows
   console.log('\nBuscando calls existentes no banco...')
-  const { data: existingRows } = await supabase.from('calls').select('id, seller_email, processing_status')
-  const existingIds = new Set((existingRows || []).map(r => r.id))
+  let existingRows = []
+  let pageFrom = 0
+  const PAGE = 1000
+  while (true) {
+    const { data: page, error: pageErr } = await supabase
+      .from('calls')
+      .select('id, seller_email, processing_status')
+      .range(pageFrom, pageFrom + PAGE - 1)
+    if (pageErr) { console.error('Erro ao buscar existentes:', pageErr.message); break }
+    if (!page || page.length === 0) break
+    existingRows = existingRows.concat(page)
+    if (page.length < PAGE) break
+    pageFrom += PAGE
+  }
+  const existingIds = new Set(existingRows.map(r => r.id))
   console.log(`Já existentes: ${existingIds.size}`)
 
   // 3. Processar em batches
